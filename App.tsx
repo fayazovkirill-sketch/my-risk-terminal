@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Direction, Instrument, CalculationResult, EntryLevel, LevelResult } from './types';
 import { INSTRUMENTS } from './constants';
-import { getRiskAdvice } from './services/geminiService';
 
 declare global {
   interface Window {
@@ -20,10 +19,7 @@ const Accordion: React.FC<{ title: string; icon?: React.ReactNode; children: Rea
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
     <div className="bg-[#17212b] rounded-xl border border-slate-700/30 overflow-hidden shadow-sm mb-2">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-3 flex justify-between items-center hover:bg-slate-800/10 transition-colors"
-      >
+      <button onClick={() => setIsOpen(!isOpen)} className="w-full p-3 flex justify-between items-center hover:bg-slate-800/10 transition-colors">
         <div className="flex items-center gap-2">
           {icon && <div className="text-[#3390ec]">{icon}</div>}
           <span className="font-bold text-[10px] tracking-wider text-slate-400 uppercase">{title}</span>
@@ -66,68 +62,70 @@ const App: React.FC = () => {
     setMarginShort(selectedInstrument.initialMarginShort || 0);
   }, [selectedInstrument]);
 
-  const results = useMemo((): CalculationResult => {
+  // Функция для обработки ввода (замена запятой на точку)
+  const handleNumericInput = (value: string, setter: (val: number) => void) => {
+    const normalized = value.replace(',', '.');
+    if (!isNaN(Number(normalized))) {
+      setter(Number(normalized));
+    }
+  };
+
+  const results = useMemo(() => {
     const totalTargetRiskRub = (deposit * riskPercent) / 100;
     const activeLevels = levels.filter(l => l.price > 0 && l.share > 0);
     const totalActiveShare = activeLevels.reduce((acc, l) => acc + l.share, 0);
 
-    // Максимально доступное кол-во лотов по всему депозиту исходя из текущего ГО
     const currentMargin = direction === Direction.LONG ? marginLong : marginShort;
-    const maxPossibleContractsByMargin = currentMargin > 0 ? Math.floor(deposit / currentMargin) : 0;
+    const maxByMargin = currentMargin > 0 ? Math.floor(deposit / currentMargin) : 0;
 
-    const levelResults: LevelResult[] = activeLevels.map(level => {
+    let theoreticalTotalContracts = 0;
+
+    const levelResults = activeLevels.map(level => {
       const effectiveShare = totalActiveShare > 0 ? (level.share / totalActiveShare) : 0;
       const allocatedRiskTarget = totalTargetRiskRub * effectiveShare;
-      
       const distance = Math.abs(level.price - stopPrice);
       const ticks = distance / (priceStep || 0.001);
       const riskPerContract = ticks * (stepPrice || 1);
       
-      // Предварительный расчет контрактов по риску
-      let contracts = riskPerContract > 0 ? Math.floor(allocatedRiskTarget / riskPerContract) : 0;
-      
+      const contractsByRisk = riskPerContract > 0 ? Math.floor(allocatedRiskTarget / riskPerContract) : 0;
+      theoreticalTotalContracts += contractsByRisk;
+
       return {
         label: level.label,
         price: level.price,
-        contracts,
+        contracts: contractsByRisk, // Пока считаем по риску
         riskPerContract,
-        allocatedRisk: contracts * riskPerContract
+        allocatedRisk: contractsByRisk * riskPerContract
       };
     });
 
-    let totalContracts = levelResults.reduce((acc, l) => acc + l.contracts, 0);
-    
-    // ПРОВЕРКА ЛИМИТА ГО (МАТЕМАТИЧЕСКИЙ ПРЕДОХРАНИТЕЛЬ)
-    if (totalContracts > maxPossibleContractsByMargin) {
-      const scaleFactor = maxPossibleContractsByMargin / totalContracts;
+    const isLimitedByMargin = theoreticalTotalContracts > maxByMargin;
+    const finalTotalContracts = isLimitedByMargin ? maxByMargin : theoreticalTotalContracts;
+
+    // Если уперлись в ГО, пересчитываем лоты уровней пропорционально
+    if (isLimitedByMargin && theoreticalTotalContracts > 0) {
+      const factor = maxByMargin / theoreticalTotalContracts;
       levelResults.forEach(l => {
-        l.contracts = Math.floor(l.contracts * scaleFactor);
+        l.contracts = Math.floor(l.contracts * factor);
         l.allocatedRisk = l.contracts * l.riskPerContract;
       });
-      totalContracts = levelResults.reduce((acc, l) => acc + l.contracts, 0);
     }
 
-    const actualTotalRiskRub = levelResults.reduce((acc, l) => acc + l.allocatedRisk, 0);
-    const averagePrice = totalContracts > 0 
-      ? levelResults.reduce((acc, l) => acc + (l.price * l.contracts), 0) / totalContracts 
+    const totalRisk = levelResults.reduce((acc, l) => acc + l.allocatedRisk, 0);
+    const avgPrice = finalTotalContracts > 0 
+      ? levelResults.reduce((acc, l) => acc + (l.price * l.contracts), 0) / finalTotalContracts 
       : 0;
 
-    return { totalRiskRub: actualTotalRiskRub, levels: levelResults, totalContracts, averagePrice };
+    return { 
+      totalRiskRub: totalRisk, 
+      levels: levelResults, 
+      totalContracts: finalTotalContracts, 
+      averagePrice: avgPrice,
+      theoreticalTotalContracts,
+      maxByMargin,
+      isLimitedByMargin
+    };
   }, [deposit, riskPercent, levels, stopPrice, priceStep, stepPrice, marginLong, marginShort, direction]);
-
-  const updateLevel = (index: number, field: keyof EntryLevel, value: any) => {
-    const newLevels = [...levels];
-    newLevels[index] = { ...newLevels[index], [field]: Number(value) };
-    setLevels(newLevels);
-  };
-
-  const shareOptions = [
-    { label: 'Off', value: 0 },
-    { label: '20%', value: 0.2 },
-    { label: '30%', value: 0.3 },
-    { label: '50%', value: 0.5 },
-    { label: '100%', value: 1.0 }
-  ];
 
   return (
     <div className="min-h-screen pb-32 max-w-lg mx-auto bg-[#0e161e] text-slate-100 flex flex-col antialiased">
@@ -136,13 +134,12 @@ const App: React.FC = () => {
           <div className="bg-[#3390ec] p-1 rounded-lg text-white"><BotIcon /></div>
           <div>
             <h1 className="font-black text-[13px] tracking-tight uppercase">ММВБ 2.0</h1>
-            <p className="text-[7px] font-bold text-[#61b8f5] uppercase tracking-widest">Risk Terminal</p>
           </div>
         </div>
       </header>
 
       <main className="p-2.5 space-y-2">
-        {/* Выбор инструмента */}
+        {/* Инструменты */}
         <section className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {INSTRUMENTS.map((inst) => (
             <button key={inst.id} onClick={() => setSelectedInstrument(inst)} className={`flex-shrink-0 px-4 py-1.5 rounded-xl border-2 transition-all flex items-center gap-2 ${selectedInstrument.id === inst.id ? 'border-[#3390ec] bg-[#3390ec]/15 text-[#3390ec]' : 'border-slate-800 bg-[#17212b] text-slate-600'}`}>
@@ -152,16 +149,16 @@ const App: React.FC = () => {
           ))}
         </section>
 
-        {/* Капитал и Направление */}
-        <Accordion title="Капитал и Направление" defaultOpen={true}>
+        {/* Капитал */}
+        <Accordion title="Депозит и Риск" defaultOpen={true}>
           <div className="grid grid-cols-2 gap-3 py-1">
             <div className="space-y-1">
               <label className="text-[8px] font-bold text-slate-500 uppercase px-1">Депозит (₽)</label>
-              <input type="number" value={deposit} onChange={(e) => setDeposit(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2.5 mono text-white font-black" />
+              <input type="text" inputMode="decimal" placeholder="100000" onChange={(e) => handleNumericInput(e.target.value, setDeposit)} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2.5 mono text-white font-black" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-bold text-slate-500 uppercase px-1">Риск (%)</label>
-              <input type="number" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2.5 mono text-[#3390ec] font-black" />
+              <input type="text" inputMode="decimal" placeholder="3" onChange={(e) => handleNumericInput(e.target.value, setRiskPercent)} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2.5 mono text-[#3390ec] font-black" />
             </div>
           </div>
           <div className="flex mt-2 p-1 bg-[#0e161e] rounded-xl border border-slate-700/40">
@@ -170,36 +167,17 @@ const App: React.FC = () => {
           </div>
         </Accordion>
 
-        {/* Спецификация инструмента */}
-        <Accordion title="Спецификация инструмента" icon={<SettingsIcon />}>
-          <div className="grid grid-cols-2 gap-3 py-1">
-            <div className="space-y-1">
-              <label className="text-[8px] font-bold text-slate-500 uppercase px-1">Шаг цены</label>
-              <input type="number" step="0.0001" value={priceStep} onChange={(e) => setPriceStep(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[8px] font-bold text-slate-500 uppercase px-1">Цена шага</label>
-              <input type="number" step="0.0001" value={stepPrice} onChange={(e) => setStepPrice(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[8px] font-bold text-slate-500 uppercase px-1">ГО Покупателя</label>
-              <input type="number" value={marginLong} onChange={(e) => setMarginLong(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[8px] font-bold text-slate-500 uppercase px-1">ГО Продавца</label>
-              <input type="number" value={marginShort} onChange={(e) => setMarginShort(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
-            </div>
-          </div>
-        </Accordion>
-
         {/* Стоп Лосс */}
         <section className="bg-red-500/10 rounded-xl border border-red-500/20 p-3 text-center">
           <label className="text-[8px] font-black text-red-500 uppercase tracking-widest block mb-1">STOP LOSS PRICE</label>
-          <input type="number" step={priceStep} value={stopPrice} onChange={(e) => setInstrumentStops(prev => ({ ...prev, [selectedInstrument.id]: Number(e.target.value) }))} className="bg-transparent text-xl font-black mono text-red-500 text-center w-full focus:outline-none" />
+          <input type="text" inputMode="decimal" placeholder="0.000" onChange={(e) => {
+            const val = e.target.value.replace(',', '.');
+            setInstrumentStops(prev => ({ ...prev, [selectedInstrument.id]: Number(val) }));
+          }} className="bg-transparent text-xl font-black mono text-red-500 text-center w-full focus:outline-none" />
         </section>
 
-        {/* Уровни входа */}
-        <Accordion title="Входы и распределение" defaultOpen={true}>
+        {/* Уровни */}
+        <Accordion title="Входы и Распределение" defaultOpen={true}>
           <div className="space-y-3">
             {levels.map((level, idx) => (
               <div key={idx} className="bg-[#0e161e] p-3 rounded-xl border border-slate-800">
@@ -207,10 +185,19 @@ const App: React.FC = () => {
                   <span className="text-[9px] text-[#3390ec] font-black uppercase">{level.label}</span>
                   <span className="text-[10px] font-black text-white">{results.levels[idx]?.contracts || 0} лот.</span>
                 </div>
-                <input type="number" step={priceStep} value={level.price || ''} onChange={(e) => updateLevel(idx, 'price', e.target.value)} className="w-full bg-[#17212b] border border-slate-700/40 rounded-lg p-2 text-sm mono text-green-400 font-bold mb-2" placeholder="Цена входа..." />
+                <input type="text" inputMode="decimal" placeholder="Цена входа" onChange={(e) => {
+                  const val = e.target.value.replace(',', '.');
+                  const newLevels = [...levels];
+                  newLevels[idx].price = Number(val);
+                  setLevels(newLevels);
+                }} className="w-full bg-[#17212b] border border-slate-700/40 rounded-lg p-2 text-sm mono text-green-400 font-bold mb-2" />
                 <div className="flex gap-1 overflow-x-auto no-scrollbar">
                   {shareOptions.map(opt => (
-                    <button key={opt.value} onClick={() => updateLevel(idx, 'share', opt.value)} className={`flex-1 min-w-[45px] py-1.5 rounded-lg text-[9px] font-black border ${level.share === opt.value ? 'bg-[#3390ec] text-white' : 'bg-[#17212b] text-slate-500 border-slate-800'}`}>{opt.label}</button>
+                    <button key={opt.value} onClick={() => {
+                      const newLevels = [...levels];
+                      newLevels[idx].share = opt.value;
+                      setLevels(newLevels);
+                    }} className={`flex-1 min-w-[45px] py-1.5 rounded-lg text-[9px] font-black border ${level.share === opt.value ? 'bg-[#3390ec] text-white' : 'bg-[#17212b] text-slate-500 border-slate-800'}`}>{opt.label}</button>
                   ))}
                 </div>
               </div>
@@ -218,35 +205,39 @@ const App: React.FC = () => {
           </div>
         </Accordion>
 
-        {/* Результаты (Итоговая карточка) */}
+        {/* Итоговая карточка */}
         <section className="mt-4 space-y-3">
-          <div className="bg-gradient-to-br from-[#3390ec] to-[#1c5ea1] rounded-2xl p-5 shadow-2xl text-white">
+          <div className={`rounded-2xl p-5 shadow-2xl text-white transition-colors ${results.isLimitedByMargin ? 'bg-gradient-to-br from-orange-600 to-red-700' : 'bg-gradient-to-br from-[#3390ec] to-[#1c5ea1]'}`}>
             <div className="flex justify-between items-end border-b border-white/10 pb-4 mb-3">
               <div>
-                <p className="text-[8px] font-black uppercase opacity-60">КОНТРАКТОВ ИТОГО</p>
-                <p className="text-4xl font-black mono leading-none tracking-tighter">
-                   {results.totalContracts}
-                </p>
+                <p className="text-[8px] font-black uppercase opacity-60">КОНТРАКТОВ (ИТОГО)</p>
+                <p className="text-4xl font-black mono leading-none">{results.totalContracts}</p>
+                {results.isLimitedByMargin && (
+                  <p className="text-[7px] mt-1 font-bold bg-black/20 px-1 rounded inline-block">ЛИМИТ ПО ДЕПОЗИТУ!</p>
+                )}
               </div>
               <div className="text-right">
-                <p className="text-[8px] font-black uppercase opacity-60">СРЕДНИЙ ВХОД</p>
-                <p className="text-2xl font-black mono leading-none">{results.averagePrice.toFixed(4)}</p>
+                <p className="text-[8px] font-black uppercase opacity-60">ПО РИСКУ МОЖНО БЫЛО</p>
+                <p className="text-xl font-black mono opacity-80">{results.theoreticalTotalContracts}</p>
               </div>
             </div>
             <div className="flex justify-between text-[9px] font-black uppercase">
               <span className="bg-black/20 px-2 py-1 rounded">РИСК: ₽{Math.round(results.totalRiskRub)}</span>
-              <span className="bg-black/20 px-2 py-1 rounded">ИНСТРУМЕНТ: {selectedInstrument.ticker}</span>
+              <span className="bg-black/20 px-2 py-1 rounded">МАКС ЛОТОВ ПО ГО: {results.maxByMargin}</span>
             </div>
           </div>
-          {results.totalContracts >= Math.floor(deposit / (direction === Direction.LONG ? marginLong : marginShort)) && results.totalContracts > 0 && (
-            <div className="text-[10px] text-yellow-500 font-bold text-center bg-yellow-500/10 p-2 rounded-lg border border-yellow-500/20 uppercase">
-              ⚠️ Достигнут лимит по обеспечению (ГО)
-            </div>
-          )}
         </section>
       </main>
     </div>
   );
 };
+
+const shareOptions = [
+  { label: 'Off', value: 0 },
+  { label: '20%', value: 0.2 },
+  { label: '30%', value: 0.3 },
+  { label: '50%', value: 0.5 },
+  { label: '100%', value: 1.0 }
+];
 
 export default App;
