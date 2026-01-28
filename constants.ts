@@ -3,17 +3,17 @@ import { Instrument } from './types';
 export const INSTRUMENTS: Instrument[] = [
   {
     id: 'ng',
-    name: 'Природный газ',
+    name: 'Natural Gas',
     ticker: 'NG',
     priceStep: 0.001,
     stepPrice: 7.88527,
-    initialMarginLong: 14637.96, // Оставляем для совместимости с логикой App.tsx
+    initialMarginLong: 14637.96,
     initialMarginShort: 11768.17,
     icon: '🔥'
   },
   {
     id: 'br',
-    name: 'Нефть Brent',
+    name: 'Brent Oil',
     ticker: 'Br',
     priceStep: 0.01,
     stepPrice: 7.82267,
@@ -23,7 +23,7 @@ export const INSTRUMENTS: Instrument[] = [
   },
   {
     id: 'silver',
-    name: 'Серебро',
+    name: 'Silver',
     ticker: 'SILV',
     priceStep: 0.01,
     stepPrice: 0.78226,
@@ -33,12 +33,22 @@ export const INSTRUMENTS: Instrument[] = [
   },
   {
     id: 'gold',
-    name: 'Золото',
+    name: 'Gold',
     ticker: 'GOLD',
     priceStep: 0.1,
     stepPrice: 7.60382,
     initialMarginLong: 29763.38,
     initialMarginShort: 29763.38,
     icon: '🥇'
+  },
+  {
+    id: 'cny',
+    name: 'Yuan',
+    ticker: 'CNY',
+    priceStep: 0.001,
+    stepPrice: 1.0,
+    initialMarginLong: 1014.6,
+    initialMarginShort: 1014.6,
+    icon: '💴'
   }
 ];
