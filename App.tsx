@@ -15,18 +15,13 @@ const TrendingDown = () => <svg xmlns="http://www.w3.org/2000/svg" className="w-
 const ChevronDown = () => <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
 const BotIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path></svg>;
 const SettingsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-const RefreshIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>;
-const ShareIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>;
 
 const Accordion: React.FC<{ title: string; icon?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, icon, children, defaultOpen = false }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
     <div className="bg-[#17212b] rounded-xl border border-slate-700/30 overflow-hidden shadow-sm mb-2">
       <button 
-        onClick={() => {
-          setIsOpen(!isOpen);
-          window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
-        }}
+        onClick={() => setIsOpen(!isOpen)}
         className="w-full p-3 flex justify-between items-center hover:bg-slate-800/10 transition-colors"
       >
         <div className="flex items-center gap-2">
@@ -45,56 +40,24 @@ const Accordion: React.FC<{ title: string; icon?: React.ReactNode; children: Rea
 };
 
 const App: React.FC = () => {
-  const tg = window.Telegram?.WebApp;
-  const isTelegram = !!tg && tg.platform !== 'unknown';
-
-  const getStored = (key: string, defaultValue: any) => {
-    const saved = localStorage.getItem(key);
-    if (!saved) return defaultValue;
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return defaultValue;
-    }
-  };
-
-  const [deposit, setDeposit] = useState<number>(() => getStored('mmvb_deposit', 100000));
-  const [riskPercent, setRiskPercent] = useState<number>(() => getStored('mmvb_risk', 3));
+  const [deposit, setDeposit] = useState<number>(100000);
+  const [riskPercent, setRiskPercent] = useState<number>(3);
   const [direction, setDirection] = useState<Direction>(Direction.LONG);
-  const [selectedInstrument, setSelectedInstrument] = useState<Instrument>(() => {
-    const id = getStored('mmvb_selected_id', INSTRUMENTS[0].id);
-    return INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];
-  });
+  const [selectedInstrument, setSelectedInstrument] = useState<Instrument>(INSTRUMENTS[0]);
   
   const [priceStep, setPriceStep] = useState<number>(selectedInstrument.priceStep);
   const [stepPrice, setStepPrice] = useState<number>(selectedInstrument.stepPrice);
   const [marginLong, setMarginLong] = useState<number>(selectedInstrument.initialMarginLong || 0);
   const [marginShort, setMarginShort] = useState<number>(selectedInstrument.initialMarginShort || 0);
 
-  const [instrumentStops, setInstrumentStops] = useState<Record<string, number>>(() => getStored('mmvb_stops', {}));
-
+  const [instrumentStops, setInstrumentStops] = useState<Record<string, number>>({});
   const stopPrice = instrumentStops[selectedInstrument.id] || 0;
 
-  const [levels, setLevels] = useState<EntryLevel[]>(() => getStored('mmvb_levels', [
+  const [levels, setLevels] = useState<EntryLevel[]>([
     { label: 'Уровень 1', price: 0, share: 0.2 },
     { label: 'Уровень 2', price: 0, share: 0.3 },
     { label: 'Уровень 3', price: 0, share: 0.5 },
-  ]));
-
-  const [aiAdvice, setAiAdvice] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (isTelegram) {
-      tg.ready();
-      tg.expand();
-      tg.MainButton.setParams({
-        text: 'АНАЛИЗ AI',
-        color: '#3390ec',
-      });
-      tg.MainButton.onClick(handleGetAiAdvice);
-    }
-  }, [isTelegram]);
+  ]);
 
   useEffect(() => {
     setPriceStep(selectedInstrument.priceStep);
@@ -108,16 +71,21 @@ const App: React.FC = () => {
     const activeLevels = levels.filter(l => l.price > 0 && l.share > 0);
     const totalActiveShare = activeLevels.reduce((acc, l) => acc + l.share, 0);
 
-    let actualTotalRiskRub = 0;
+    // Максимально доступное кол-во лотов по всему депозиту исходя из текущего ГО
+    const currentMargin = direction === Direction.LONG ? marginLong : marginShort;
+    const maxPossibleContractsByMargin = currentMargin > 0 ? Math.floor(deposit / currentMargin) : 0;
+
     const levelResults: LevelResult[] = activeLevels.map(level => {
       const effectiveShare = totalActiveShare > 0 ? (level.share / totalActiveShare) : 0;
       const allocatedRiskTarget = totalTargetRiskRub * effectiveShare;
+      
       const distance = Math.abs(level.price - stopPrice);
       const ticks = distance / (priceStep || 0.001);
       const riskPerContract = ticks * (stepPrice || 1);
-      const contracts = riskPerContract > 0 ? Math.floor(allocatedRiskTarget / riskPerContract) : 0;
-      actualTotalRiskRub += contracts * riskPerContract;
-
+      
+      // Предварительный расчет контрактов по риску
+      let contracts = riskPerContract > 0 ? Math.floor(allocatedRiskTarget / riskPerContract) : 0;
+      
       return {
         label: level.label,
         price: level.price,
@@ -127,29 +95,31 @@ const App: React.FC = () => {
       };
     });
 
-    const totalContracts = levelResults.reduce((acc, l) => acc + l.contracts, 0);
+    let totalContracts = levelResults.reduce((acc, l) => acc + l.contracts, 0);
+    
+    // ПРОВЕРКА ЛИМИТА ГО (МАТЕМАТИЧЕСКИЙ ПРЕДОХРАНИТЕЛЬ)
+    if (totalContracts > maxPossibleContractsByMargin) {
+      const scaleFactor = maxPossibleContractsByMargin / totalContracts;
+      levelResults.forEach(l => {
+        l.contracts = Math.floor(l.contracts * scaleFactor);
+        l.allocatedRisk = l.contracts * l.riskPerContract;
+      });
+      totalContracts = levelResults.reduce((acc, l) => acc + l.contracts, 0);
+    }
+
+    const actualTotalRiskRub = levelResults.reduce((acc, l) => acc + l.allocatedRisk, 0);
     const averagePrice = totalContracts > 0 
       ? levelResults.reduce((acc, l) => acc + (l.price * l.contracts), 0) / totalContracts 
       : 0;
 
     return { totalRiskRub: actualTotalRiskRub, levels: levelResults, totalContracts, averagePrice };
-  }, [deposit, riskPercent, levels, stopPrice, priceStep, stepPrice]);
+  }, [deposit, riskPercent, levels, stopPrice, priceStep, stepPrice, marginLong, marginShort, direction]);
 
   const updateLevel = (index: number, field: keyof EntryLevel, value: any) => {
     const newLevels = [...levels];
     newLevels[index] = { ...newLevels[index], [field]: Number(value) };
     setLevels(newLevels);
   };
-
-  async function handleGetAiAdvice() {
-    setIsAiLoading(true);
-    try {
-      const advice = await getRiskAdvice(selectedInstrument, direction, results.averagePrice, stopPrice, deposit, riskPercent, results);
-      setAiAdvice(advice);
-    } finally {
-      setIsAiLoading(false);
-    }
-  }
 
   const shareOptions = [
     { label: 'Off', value: 0 },
@@ -172,6 +142,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="p-2.5 space-y-2">
+        {/* Выбор инструмента */}
         <section className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {INSTRUMENTS.map((inst) => (
             <button key={inst.id} onClick={() => setSelectedInstrument(inst)} className={`flex-shrink-0 px-4 py-1.5 rounded-xl border-2 transition-all flex items-center gap-2 ${selectedInstrument.id === inst.id ? 'border-[#3390ec] bg-[#3390ec]/15 text-[#3390ec]' : 'border-slate-800 bg-[#17212b] text-slate-600'}`}>
@@ -181,6 +152,7 @@ const App: React.FC = () => {
           ))}
         </section>
 
+        {/* Капитал и Направление */}
         <Accordion title="Капитал и Направление" defaultOpen={true}>
           <div className="grid grid-cols-2 gap-3 py-1">
             <div className="space-y-1">
@@ -198,15 +170,16 @@ const App: React.FC = () => {
           </div>
         </Accordion>
 
+        {/* Спецификация инструмента */}
         <Accordion title="Спецификация инструмента" icon={<SettingsIcon />}>
           <div className="grid grid-cols-2 gap-3 py-1">
             <div className="space-y-1">
               <label className="text-[8px] font-bold text-slate-500 uppercase px-1">Шаг цены</label>
-              <input type="number" value={priceStep} onChange={(e) => setPriceStep(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
+              <input type="number" step="0.0001" value={priceStep} onChange={(e) => setPriceStep(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-bold text-slate-500 uppercase px-1">Цена шага</label>
-              <input type="number" value={stepPrice} onChange={(e) => setStepPrice(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
+              <input type="number" step="0.0001" value={stepPrice} onChange={(e) => setStepPrice(Number(e.target.value))} className="w-full bg-[#0e161e] border border-slate-700/40 rounded-lg p-2 text-xs mono" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-bold text-slate-500 uppercase px-1">ГО Покупателя</label>
@@ -219,11 +192,13 @@ const App: React.FC = () => {
           </div>
         </Accordion>
 
+        {/* Стоп Лосс */}
         <section className="bg-red-500/10 rounded-xl border border-red-500/20 p-3 text-center">
           <label className="text-[8px] font-black text-red-500 uppercase tracking-widest block mb-1">STOP LOSS PRICE</label>
           <input type="number" step={priceStep} value={stopPrice} onChange={(e) => setInstrumentStops(prev => ({ ...prev, [selectedInstrument.id]: Number(e.target.value) }))} className="bg-transparent text-xl font-black mono text-red-500 text-center w-full focus:outline-none" />
         </section>
 
+        {/* Уровни входа */}
         <Accordion title="Входы и распределение" defaultOpen={true}>
           <div className="space-y-3">
             {levels.map((level, idx) => (
@@ -243,12 +218,15 @@ const App: React.FC = () => {
           </div>
         </Accordion>
 
+        {/* Результаты (Итоговая карточка) */}
         <section className="mt-4 space-y-3">
           <div className="bg-gradient-to-br from-[#3390ec] to-[#1c5ea1] rounded-2xl p-5 shadow-2xl text-white">
             <div className="flex justify-between items-end border-b border-white/10 pb-4 mb-3">
               <div>
                 <p className="text-[8px] font-black uppercase opacity-60">КОНТРАКТОВ ИТОГО</p>
-                <p className="text-4xl font-black mono leading-none tracking-tighter">{results.totalContracts}</p>
+                <p className="text-4xl font-black mono leading-none tracking-tighter">
+                   {results.totalContracts}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[8px] font-black uppercase opacity-60">СРЕДНИЙ ВХОД</p>
@@ -260,6 +238,11 @@ const App: React.FC = () => {
               <span className="bg-black/20 px-2 py-1 rounded">ИНСТРУМЕНТ: {selectedInstrument.ticker}</span>
             </div>
           </div>
+          {results.totalContracts >= Math.floor(deposit / (direction === Direction.LONG ? marginLong : marginShort)) && results.totalContracts > 0 && (
+            <div className="text-[10px] text-yellow-500 font-bold text-center bg-yellow-500/10 p-2 rounded-lg border border-yellow-500/20 uppercase">
+              ⚠️ Достигнут лимит по обеспечению (ГО)
+            </div>
+          )}
         </section>
       </main>
     </div>
